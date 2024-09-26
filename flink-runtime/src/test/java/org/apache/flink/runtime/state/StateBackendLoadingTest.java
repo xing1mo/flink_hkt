@@ -18,25 +18,18 @@
 
 package org.apache.flink.runtime.state;
 
-import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.configuration.StateBackendOptions;
-import org.apache.flink.core.fs.Path;
-import org.apache.flink.runtime.state.filesystem.FsStateBackend;
 import org.apache.flink.runtime.state.hashmap.HashMapStateBackend;
 import org.apache.flink.runtime.state.hashmap.HashMapStateBackendFactory;
-import org.apache.flink.testutils.junit.utils.TempDirUtils;
 import org.apache.flink.util.DynamicCodeLoadingException;
-import org.apache.flink.util.TernaryBoolean;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mockito;
 
 import java.io.IOException;
-import java.net.URI;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -126,59 +119,6 @@ class StateBackendLoadingTest {
 
         assertThat(backend1).isNotNull();
         assertThat(backend2).isNotNull();
-    }
-
-    // ------------------------------------------------------------------------
-    //  File System State Backend
-    // ------------------------------------------------------------------------
-
-    /**
-     * Validates taking the application-defined file system state backend and adding with additional
-     * parameters from configuration, but giving precedence to application-defined parameters over
-     * configuration-defined parameters.
-     */
-    @Test
-    void testLoadFileSystemStateBackendMixed() throws Exception {
-        final String appCheckpointDir = new Path(TempDirUtils.newFolder(tmp).toURI()).toString();
-        final String checkpointDir = new Path(TempDirUtils.newFolder(tmp).toURI()).toString();
-        final String savepointDir = new Path(TempDirUtils.newFolder(tmp).toURI()).toString();
-
-        final Path expectedCheckpointsPath = new Path(new URI(appCheckpointDir));
-        final Path expectedSavepointsPath = new Path(savepointDir);
-
-        final int threshold = 1000000;
-        final int writeBufferSize = 4000000;
-
-        final FsStateBackend backend =
-                new FsStateBackend(
-                        new URI(appCheckpointDir),
-                        null,
-                        threshold,
-                        writeBufferSize,
-                        TernaryBoolean.TRUE);
-
-        final Configuration config = new Configuration();
-        config.setString(backendKey, "hashmap"); // this should not be picked up
-        config.set(
-                CheckpointingOptions.CHECKPOINTS_DIRECTORY,
-                checkpointDir); // this should not be picked up
-        config.set(CheckpointingOptions.SAVEPOINT_DIRECTORY, savepointDir);
-        config.set(
-                CheckpointingOptions.FS_SMALL_FILE_THRESHOLD,
-                MemorySize.parse("20")); // this should not be picked up
-        config.set(
-                CheckpointingOptions.FS_WRITE_BUFFER_SIZE, 3000000); // this should not be picked up
-
-        final StateBackend loadedBackend =
-                StateBackendLoader.fromApplicationOrConfigOrDefault(
-                        backend, config, config, cl, null);
-        assertThat(loadedBackend).isInstanceOf(FsStateBackend.class);
-
-        final FsStateBackend fs = (FsStateBackend) loadedBackend;
-        assertThat(fs.getCheckpointPath()).isEqualTo(expectedCheckpointsPath);
-        assertThat(fs.getSavepointPath()).isEqualTo(expectedSavepointsPath);
-        assertThat(fs.getMinFileSizeThreshold()).isEqualTo(threshold);
-        assertThat(fs.getWriteBufferSize()).isEqualTo(writeBufferSize);
     }
 
     // ------------------------------------------------------------------------
