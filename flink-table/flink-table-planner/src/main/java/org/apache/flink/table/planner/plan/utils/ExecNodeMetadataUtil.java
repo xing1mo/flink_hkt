@@ -54,6 +54,7 @@ import org.apache.flink.table.planner.plan.nodes.exec.stream.StreamExecChangelog
 import org.apache.flink.table.planner.plan.nodes.exec.stream.StreamExecCorrelate;
 import org.apache.flink.table.planner.plan.nodes.exec.stream.StreamExecDataStreamScan;
 import org.apache.flink.table.planner.plan.nodes.exec.stream.StreamExecDeduplicate;
+import org.apache.flink.table.planner.plan.nodes.exec.stream.StreamExecDeltaJoin;
 import org.apache.flink.table.planner.plan.nodes.exec.stream.StreamExecDropUpdateBefore;
 import org.apache.flink.table.planner.plan.nodes.exec.stream.StreamExecExchange;
 import org.apache.flink.table.planner.plan.nodes.exec.stream.StreamExecExpand;
@@ -74,6 +75,7 @@ import org.apache.flink.table.planner.plan.nodes.exec.stream.StreamExecLookupJoi
 import org.apache.flink.table.planner.plan.nodes.exec.stream.StreamExecMLPredictTableFunction;
 import org.apache.flink.table.planner.plan.nodes.exec.stream.StreamExecMatch;
 import org.apache.flink.table.planner.plan.nodes.exec.stream.StreamExecMiniBatchAssigner;
+import org.apache.flink.table.planner.plan.nodes.exec.stream.StreamExecMultiJoin;
 import org.apache.flink.table.planner.plan.nodes.exec.stream.StreamExecMultipleInput;
 import org.apache.flink.table.planner.plan.nodes.exec.stream.StreamExecNode;
 import org.apache.flink.table.planner.plan.nodes.exec.stream.StreamExecOverAggregate;
@@ -148,6 +150,7 @@ public final class ExecNodeMetadataUtil {
                     add(StreamExecLookupJoin.class);
                     add(StreamExecMatch.class);
                     add(StreamExecMiniBatchAssigner.class);
+                    add(StreamExecMultiJoin.class);
                     add(StreamExecOverAggregate.class);
                     add(StreamExecRank.class);
                     add(StreamExecSink.class);
@@ -172,6 +175,7 @@ public final class ExecNodeMetadataUtil {
                     add(StreamExecPythonGroupWindowAggregate.class);
                     add(StreamExecPythonOverAggregate.class);
                     add(StreamExecMLPredictTableFunction.class);
+                    add(StreamExecDeltaJoin.class);
                     // Batch execution mode
                     add(BatchExecSink.class);
                     add(BatchExecTableSourceScan.class);
@@ -215,7 +219,6 @@ public final class ExecNodeMetadataUtil {
                     add(StreamExecGroupTableAggregate.class);
                     add(StreamExecPythonGroupTableAggregate.class);
                     add(StreamExecMultipleInput.class);
-                    add(StreamExecMLPredictTableFunction.class);
                 }
             };
 
@@ -286,9 +289,7 @@ public final class ExecNodeMetadataUtil {
     }
 
     private static void addToLookupMap(Class<? extends ExecNode<?>> execNodeClass) {
-        // TODO: remove the logic when StreamExecMLPredictTableFunction supports serde.
-        if (!hasJsonCreatorAnnotation(execNodeClass)
-                && execNodeClass != StreamExecMLPredictTableFunction.class) {
+        if (!hasJsonCreatorAnnotation(execNodeClass)) {
             throw new IllegalStateException(
                     String.format(
                             "ExecNode: %s does not implement @JsonCreator annotation on "

@@ -89,8 +89,8 @@ import static org.apache.flink.table.types.logical.utils.LogicalTypeChecks.getFi
         name = "stream-exec-process-table-function",
         version = 1,
         producedTransformations = StreamExecProcessTableFunction.PROCESS_TRANSFORMATION,
-        minPlanVersion = FlinkVersion.v2_0,
-        minStateVersion = FlinkVersion.v2_0)
+        minPlanVersion = FlinkVersion.v2_1,
+        minStateVersion = FlinkVersion.v2_1)
 public class StreamExecProcessTableFunction extends ExecNodeBase<RowData>
         implements StreamExecNode<RowData>, SingleTransformationTranslator<RowData> {
 
@@ -284,7 +284,7 @@ public class StreamExecProcessTableFunction extends ExecNodeBase<RowData>
                 tableArgCall.getPartitionKeys(),
                 consumedChangelogMode,
                 tableArg.is(StaticArgumentTrait.PASS_COLUMNS_THROUGH),
-                tableArg.is(StaticArgumentTrait.TABLE_AS_SET),
+                tableArg.is(StaticArgumentTrait.SET_SEMANTIC_TABLE),
                 timeColumn);
     }
 

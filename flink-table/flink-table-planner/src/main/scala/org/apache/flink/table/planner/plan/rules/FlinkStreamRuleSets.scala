@@ -20,6 +20,7 @@ package org.apache.flink.table.planner.plan.rules
 import org.apache.flink.table.planner.plan.nodes.logical._
 import org.apache.flink.table.planner.plan.nodes.physical.stream.{StreamPhysicalMLPredictTableFunctionRule, StreamPhysicalProcessTableFunctionRule}
 import org.apache.flink.table.planner.plan.rules.logical._
+import org.apache.flink.table.planner.plan.rules.logical.JoinToMultiJoinRule
 import org.apache.flink.table.planner.plan.rules.physical.FlinkExpandConversionRule
 import org.apache.flink.table.planner.plan.rules.physical.stream._
 
@@ -181,13 +182,15 @@ object FlinkStreamRuleSets {
 
   /** RuleSet to prune empty results rules */
   val PRUNE_EMPTY_RULES: RuleSet = RuleSets.ofList(
-    PruneEmptyRules.AGGREGATE_INSTANCE,
-    PruneEmptyRules.FILTER_INSTANCE,
-    PruneEmptyRules.JOIN_LEFT_INSTANCE,
-    PruneEmptyRules.JOIN_RIGHT_INSTANCE,
+    FlinkPruneEmptyRules.UNION_INSTANCE,
+    PruneEmptyRules.INTERSECT_INSTANCE,
+    FlinkPruneEmptyRules.MINUS_INSTANCE,
     PruneEmptyRules.PROJECT_INSTANCE,
+    PruneEmptyRules.FILTER_INSTANCE,
     PruneEmptyRules.SORT_INSTANCE,
-    PruneEmptyRules.UNION_INSTANCE
+    PruneEmptyRules.AGGREGATE_INSTANCE,
+    PruneEmptyRules.JOIN_LEFT_INSTANCE,
+    PruneEmptyRules.JOIN_RIGHT_INSTANCE
   )
 
   /** RuleSet about project */
@@ -219,7 +222,7 @@ object FlinkStreamRuleSets {
     // merge filter to MultiJoin
     CoreRules.FILTER_MULTI_JOIN_MERGE,
     // merge join to MultiJoin
-    FlinkJoinToMultiJoinRule.INSTANCE
+    JoinToMultiJoinForReorderRule.INSTANCE
   )
 
   val JOIN_REORDER_RULES: RuleSet = RuleSets.ofList(
@@ -227,6 +230,15 @@ object FlinkStreamRuleSets {
     RewriteMultiJoinConditionRule.INSTANCE,
     // join reorder
     FlinkJoinReorderRule.INSTANCE
+  )
+
+  val MULTI_JOIN_RULES: RuleSet = RuleSets.ofList(
+    // merge project to MultiJoin
+    CoreRules.PROJECT_MULTI_JOIN_MERGE,
+    // merge filter to MultiJoin
+    CoreRules.FILTER_MULTI_JOIN_MERGE,
+    // merge join to MultiJoin
+    JoinToMultiJoinRule.INSTANCE
   )
 
   /** RuleSet to do logical optimize. This RuleSet is a sub-set of [[LOGICAL_OPT_RULES]]. */
@@ -309,6 +321,7 @@ object FlinkStreamRuleSets {
     FlinkLogicalCalc.CONVERTER,
     FlinkLogicalCorrelate.CONVERTER,
     FlinkLogicalJoin.CONVERTER,
+    FlinkLogicalMultiJoin.CONVERTER,
     FlinkLogicalSort.STREAM_CONVERTER,
     FlinkLogicalUnion.CONVERTER,
     FlinkLogicalValues.CONVERTER,
@@ -474,6 +487,7 @@ object FlinkStreamRuleSets {
     StreamPhysicalMLPredictTableFunctionRule.INSTANCE,
     // join
     StreamPhysicalJoinRule.INSTANCE,
+    StreamPhysicalMultiJoinRule.INSTANCE,
     StreamPhysicalIntervalJoinRule.INSTANCE,
     StreamPhysicalTemporalJoinRule.INSTANCE,
     StreamPhysicalLookupJoinRule.SNAPSHOT_ON_TABLESCAN,
@@ -508,6 +522,11 @@ object FlinkStreamRuleSets {
     MiniBatchIntervalInferRule.INSTANCE
   )
 
+  val DUPLICATE_CHANGES_RULES: RuleSet = RuleSets.ofList(
+    // duplicate changes infer rule
+    DuplicateChangesInferRule.INSTANCE
+  )
+
   /** RuleSet to optimize plans after stream exec execution. */
   val PHYSICAL_REWRITE: RuleSet = RuleSets.ofList(
     // optimize agg rule
@@ -515,7 +534,9 @@ object FlinkStreamRuleSets {
     // incremental agg rule
     IncrementalAggregateRule.INSTANCE,
     // optimize window agg rule
-    TwoStageOptimizedWindowAggregateRule.INSTANCE
+    TwoStageOptimizedWindowAggregateRule.INSTANCE,
+    // delta join rule
+    DeltaJoinRewriteRule.INSTANCE
   )
 
 }

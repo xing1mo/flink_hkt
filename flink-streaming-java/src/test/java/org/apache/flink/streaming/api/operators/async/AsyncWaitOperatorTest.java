@@ -112,7 +112,7 @@ import static org.junit.Assert.assertEquals;
  * </ul>
  */
 @Timeout(value = 100, unit = TimeUnit.SECONDS)
-class AsyncWaitOperatorTest {
+public class AsyncWaitOperatorTest {
     private static final long TIMEOUT = 1000L;
 
     @RegisterExtension
@@ -180,7 +180,7 @@ class AsyncWaitOperatorTest {
         }
     }
 
-    private static class MyAsyncFunction extends MyAbstractAsyncFunction<Integer> {
+    public static class MyAsyncFunction extends MyAbstractAsyncFunction<Integer> {
         private static final long serialVersionUID = -1504699677704123889L;
 
         @Override
@@ -202,10 +202,10 @@ class AsyncWaitOperatorTest {
      * is used in the testStateSnapshotAndRestore, ensuring that {@link StreamElement} can stay in
      * the {@link StreamElementQueue} to be snapshotted while checkpointing.
      */
-    private static class LazyAsyncFunction extends MyAsyncFunction {
+    public static class LazyAsyncFunction extends MyAsyncFunction {
         private static final long serialVersionUID = 3537791752703154670L;
 
-        private static CountDownLatch latch;
+        private final transient CountDownLatch latch;
 
         public LazyAsyncFunction() {
             latch = new CountDownLatch(1);
@@ -215,21 +215,22 @@ class AsyncWaitOperatorTest {
         public void asyncInvoke(final Integer input, final ResultFuture<Integer> resultFuture)
                 throws Exception {
             executorService.submit(
-                    new Runnable() {
-                        @Override
-                        public void run() {
-                            try {
-                                latch.await();
-                            } catch (InterruptedException e) {
-                                // do nothing
-                            }
-
-                            resultFuture.complete(Collections.singletonList(input));
+                    () -> {
+                        try {
+                            waitLatch();
+                        } catch (InterruptedException e) {
+                            // do nothing
                         }
+
+                        resultFuture.complete(Collections.singletonList(input));
                     });
         }
 
-        public static void countDown() {
+        protected void waitLatch() throws InterruptedException {
+            latch.await();
+        }
+
+        public void countDown() {
             latch.countDown();
         }
     }
@@ -255,7 +256,7 @@ class AsyncWaitOperatorTest {
      * A special {@link LazyAsyncFunction} for timeout handling. Complete the result future with 3
      * times the input when the timeout occurred.
      */
-    private static class IgnoreTimeoutLazyAsyncFunction extends LazyAsyncFunction {
+    public static class IgnoreTimeoutLazyAsyncFunction extends LazyAsyncFunction {
         private static final long serialVersionUID = 1428714561365346128L;
 
         @Override
@@ -616,9 +617,11 @@ class AsyncWaitOperatorTest {
 
         testHarness.setupOutputForSingletonOperatorChain();
 
+        LazyAsyncFunction lazyAsyncFunction = new LazyAsyncFunction();
+
         AsyncWaitOperatorFactory<Integer, Integer> factory =
                 new AsyncWaitOperatorFactory<>(
-                        new LazyAsyncFunction(), TIMEOUT, 4, AsyncDataStream.OutputMode.ORDERED);
+                        lazyAsyncFunction, TIMEOUT, 4, AsyncDataStream.OutputMode.ORDERED);
 
         final StreamConfig streamConfig = testHarness.getStreamConfig();
         OperatorID operatorID = new OperatorID(42L, 4711L);
@@ -654,7 +657,7 @@ class AsyncWaitOperatorTest {
 
         assertThat(taskStateManagerMock.getReportedCheckpointId()).isEqualTo(checkpointId);
 
-        LazyAsyncFunction.countDown();
+        lazyAsyncFunction.countDown();
 
         testHarness.endInput();
         testHarness.waitForTaskCompletion();

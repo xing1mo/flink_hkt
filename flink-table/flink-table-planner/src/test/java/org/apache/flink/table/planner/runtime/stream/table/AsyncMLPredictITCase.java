@@ -18,6 +18,7 @@
 
 package org.apache.flink.table.planner.runtime.stream.table;
 
+import org.apache.flink.core.testutils.FlinkAssertions;
 import org.apache.flink.table.api.config.ExecutionConfigOptions;
 import org.apache.flink.table.planner.factories.TestValuesModelFactory;
 import org.apache.flink.table.planner.factories.TestValuesTableFactory;
@@ -37,9 +38,10 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeoutException;
 
-import static org.apache.flink.table.planner.factories.TestValuesTableFactory.changelogRow;
 import static org.assertj.core.api.Assertions.assertThatList;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** ITCase for async ML_PREDICT. */
 @ExtendWith(ParameterizedTestExtension.class)
@@ -72,19 +74,6 @@ public class AsyncMLPredictITCase extends StreamingWithStateTestBase {
                     Row.of(3L, 15, "Fabian"),
                     Row.of(11L, null, "Hello world"),
                     Row.of(9L, 12, "Hello world!"));
-
-    private final List<Row> cdcRowData =
-            Arrays.asList(
-                    changelogRow("+I", 1L, 12, "Julian"),
-                    changelogRow("-U", 1L, 12, "Julian"),
-                    changelogRow("+U", 1L, 13, "Julian"),
-                    changelogRow("-D", 1L, 13, "Julian"),
-                    changelogRow("+I", 1L, 14, "Julian"),
-                    changelogRow("+I", 2L, 16, "Hello"),
-                    changelogRow("-U", 2L, 16, "Hello"),
-                    changelogRow("+U", 2L, 17, "Hello"),
-                    changelogRow("+I", 3L, 19, "Fabian"),
-                    changelogRow("-D", 3L, 19, "Fabian"));
 
     private final Map<Row, List<Row>> id2features = new HashMap<>();
 
@@ -122,6 +111,12 @@ public class AsyncMLPredictITCase extends StreamingWithStateTestBase {
         content2vector.put(
                 Row.of("Fabian"),
                 Collections.singletonList(Row.of((Object) new Float[] {3.0f, 4.0f, 5.0f})));
+        content2vector.put(
+                Row.of("Hello world"),
+                Collections.singletonList(Row.of((Object) new Float[] {4.0f, 5.0f, 6.0f})));
+        content2vector.put(
+                Row.of("Hello world!"),
+                Collections.singletonList(Row.of((Object) new Float[] {5.0f, 6.0f, 7.0f})));
     }
 
     @BeforeEach
@@ -139,7 +134,6 @@ public class AsyncMLPredictITCase extends StreamingWithStateTestBase {
 
         createScanTable("src", data);
         createScanTable("nullable_src", dataWithNull);
-        createScanTable("cdc_src", cdcRowData);
 
         tEnv().executeSql(
                         String.format(
@@ -171,6 +165,7 @@ public class AsyncMLPredictITCase extends StreamingWithStateTestBase {
                                         + "WITH (\n"
                                         + "  'provider' = 'values',"
                                         + "  'data-id' = '%s',"
+                                        + "  'latency' = '1000',"
                                         + "  'async' = 'true'"
                                         + ")",
                                 TestValuesModelFactory.registerData(content2vector)));
@@ -217,23 +212,15 @@ public class AsyncMLPredictITCase extends StreamingWithStateTestBase {
     }
 
     @TestTemplate
-    public void testAsyncPredictWithCDCData() throws Exception {
-        tEnv().executeSql(
-                        "CREATE TEMPORARY TABLE sink("
-                                + "  id BIGINT,"
-                                + "  vector ARRAY<FLOAT>"
-                                + ") WITH ("
-                                + "  'connector' = 'values',"
-                                + "  'sink-insert-only' = 'false'"
-                                + ")");
-        tEnv().executeSql(
-                        "INSERT INTO sink SELECT id, vector FROM ML_PREDICT(TABLE cdc_src, MODEL m3, DESCRIPTOR(`content`))")
-                .await();
-
-        assertThatList(TestValuesTableFactory.getResults("sink"))
-                .containsExactlyInAnyOrder(
-                        Row.of(2L, new Float[] {2.0f, 3.0f, 4.0f}),
-                        Row.of(1L, new Float[] {1.0f, 2.0f, 3.0f}));
+    public void testAsyncPredictWithRuntimeConfig() {
+        assertThatThrownBy(
+                        () ->
+                                tEnv().executeSql(
+                                                "SELECT id, vector FROM ML_PREDICT(TABLE src, MODEL m3, DESCRIPTOR(`content`), MAP['timeout', '1ms'])")
+                                        .await())
+                .satisfies(
+                        FlinkAssertions.anyCauseMatches(
+                                TimeoutException.class, "Async function call has timed out."));
     }
 
     private void createScanTable(String tableName, List<Row> data) {
@@ -247,8 +234,7 @@ public class AsyncMLPredictITCase extends StreamingWithStateTestBase {
                                         + "  PRIMARY KEY (`id`) NOT ENFORCED"
                                         + ") WITH ("
                                         + "  'connector' = 'values',"
-                                        + "  'data-id' = '%s',"
-                                        + "  'changelog-mode' = 'I,UA,UB,D'"
+                                        + "  'data-id' = '%s'"
                                         + ")",
                                 tableName, dataId));
     }
